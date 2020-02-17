@@ -3,10 +3,8 @@ var path = require('path')
 var yauzl = require('yauzl')
 var mkdirp = require('mkdirp')
 var concat = require('concat-stream')
-var debug = require('debug')('extract-zip')
 
 module.exports = function (zipPath, opts, cb) {
-  debug('creating target directory', opts.dir)
 
   if (path.isAbsolute(opts.dir) === false) {
     return cb(new Error('Target directory is expected to be absolute'))
@@ -25,7 +23,6 @@ module.exports = function (zipPath, opts, cb) {
   })
 
   function openZip () {
-    debug('opening', zipPath, 'with opts', opts)
 
     yauzl.open(zipPath, {lazyEntries: true}, function (err, zipfile) {
       if (err) return cb(err)
@@ -36,18 +33,15 @@ module.exports = function (zipPath, opts, cb) {
 
       zipfile.on('close', function () {
         if (!cancelled) {
-          debug('zip extraction complete')
           cb()
         }
       })
 
       zipfile.on('entry', function (entry) {
         if (cancelled) {
-          debug('skipping entry', entry.fileName, {cancelled: cancelled})
           return
         }
 
-        debug('zipfile entry', entry.fileName)
 
         if (/^__MACOSX\//.test(entry.fileName)) {
           // dir name starts with __MACOSX/
@@ -86,7 +80,6 @@ module.exports = function (zipPath, opts, cb) {
                 zipfile.close()
                 return cb(err)
               }
-              debug('finished processing', entry.fileName)
               zipfile.readEntry()
             })
           })
@@ -95,7 +88,6 @@ module.exports = function (zipPath, opts, cb) {
 
       function extractEntry (entry, done) {
         if (cancelled) {
-          debug('skipping entry extraction', entry.fileName, {cancelled: cancelled})
           return setImmediate(done)
         }
 
@@ -135,8 +127,6 @@ module.exports = function (zipPath, opts, cb) {
           }
         }
 
-        debug('extracting entry', { filename: entry.fileName, isDir: isDir, isSymlink: symlink })
-
         // reverse umask first (~)
         var umask = ~process.umask()
         // & with processes umask to override invalid perms
@@ -146,20 +136,16 @@ module.exports = function (zipPath, opts, cb) {
         var destDir = dest
         if (!isDir) destDir = path.dirname(dest)
 
-        debug('mkdirp', {dir: destDir})
         mkdirp(destDir, function (err) {
           if (err) {
-            debug('mkdirp error', destDir, {error: err})
             cancelled = true
             return done(err)
           }
 
           if (isDir) return done()
 
-          debug('opening read stream', dest)
           zipfile.openReadStream(entry, function (err, readStream) {
             if (err) {
-              debug('openReadStream error', err)
               cancelled = true
               return done(err)
             }
@@ -180,7 +166,6 @@ module.exports = function (zipPath, opts, cb) {
               })
 
               writeStream.on('error', function (err) {
-                debug('write error', {error: err})
                 cancelled = true
                 return done(err)
               })
@@ -190,7 +175,6 @@ module.exports = function (zipPath, opts, cb) {
             function writeSymlink () {
               readStream.pipe(concat(function (data) {
                 var link = data.toString()
-                debug('creating symlink', link, dest)
                 fs.symlink(link, dest, function (err) {
                   if (err) cancelled = true
                   done(err)
